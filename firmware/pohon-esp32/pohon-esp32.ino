@@ -1,35 +1,16 @@
-/**
- * Pohon Donasi Interaktif BAZNAS — Firmware ESP32 (baca Firebase RTDB langsung)
- * ---------------------------------------------------------------------------
- * OPSI A: app di-deploy ke Vercel, server menulis perintah ke Firebase RTDB,
- * ESP32 membacanya langsung. ESP cukup punya internet (WiFi apa pun) — tidak
- * perlu satu jaringan dengan PC/server.
- *
- * Hardware (mengikuti pohondonasi/PohonDonasi.ino):
- *   - LED strip WS2812B  : GPIO18, 10 LED
- *   - RGB LED (katoda)   : R=25, G=26, B=27  (digital on/off)
- *   - Buzzer             : GPIO19
- *
- * Kontrak data (docs/ESP32_INTEGRATION.md):
- *   server → device : /tree/command = { id, leafId, color, effect, ts }
- *                     (ditulis tiap donasi sukses; `id` unik → animasi sekali)
- *   device → server : /tree/status/pohon-01 = heartbeat "online"
- *   `color` = green|orange|yellow|blue|purple|red (lihat src/config/leaves.ts)
- *
- * Library (Arduino Library Manager):
- *   - "Firebase Arduino Client Library for ESP8266 and ESP32" (Mobizt) v4.x
- *   - "FastLED"
- */
-
-#include "addons/RTDBHelper.h"
-#include "addons/TokenHelper.h"
 #include <Arduino.h>
 #include <FastLED.h>
 #include <Firebase_ESP_Client.h>
 #include <WiFi.h>
 
+// Helper bawaan library Firebase — WAJIB di-include SETELAH
+// Firebase_ESP_Client.h. (Blok terpisah + komentar ini mencegah clang-format
+// menaikkannya ke atas.)
+#include "addons/RTDBHelper.h"
+#include "addons/TokenHelper.h"
+
 // ============================ KONFIGURASI ==================================
-#define WIFI_SSID "pih"
+#define WIFI_SSID "Pih" // huruf besar 'P' — SSID case-sensitive!
 #define WIFI_PASSWORD "sulthanrafi"
 
 // Firebase (project pohon-harapan). API key: Project settings > Web API Key.
@@ -183,18 +164,36 @@ void sendHeartbeat() {
   j.set("online", true);
   j.set("lastSeen", epochMs);
   j.set("currentLeaf", pendingLeaf);
-  j.set("firmware", "2.0.0-rtdb");
+  j.set("firmware", "2.1.0-rtdb");
   Firebase.RTDB.setJSON(&fbdo, "/tree/status/" DEVICE_ID, &j);
 }
 
 void connectWiFi() {
+  // Tanpa scanNetworks (memicu reset/brownout di board ini). Cukup begin +
+  // laporkan kode status supaya ketahuan sebab gagalnya.
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_STA);
+  Serial.printf("\n[WiFi] connect ke '%s' (SSID len=%d) ...\n", WIFI_SSID,
+                (int)strlen(WIFI_SSID));
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
-    Serial.print(".");
+  unsigned long t0 = millis();
+  int last = -99;
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 30000) {
+    delay(500);
+    int s = WiFi.status();
+    if (s != last) {
+      last = s;
+      Serial.printf("[WiFi] status=%d\n", s); // 3=OK 1=SSID? 4=pass? 6=putus
+    }
   }
-  Serial.printf("\nWiFi OK: %s\n", WiFi.localIP().toString().c_str());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("[WiFi] OK: %s  RSSI %d\n", WiFi.localIP().toString().c_str(),
+                  WiFi.RSSI());
+  } else {
+    Serial.printf("[WiFi] GAGAL status=%d "
+                  "(1=SSID tak ada/5GHz, 4=password salah, 6=putus)\n",
+                  WiFi.status());
+  }
 }
 
 void setup() {
@@ -212,7 +211,24 @@ void setup() {
   stripOff();
 
   connectWiFi();
-  configTime(7 * 3600, 0, "pool.ntp.org", "time.google.com"); // WIB
+
+  // Sinkron waktu (NTP) & TUNGGU sampai jam benar SEBELUM Firebase. Token TLS
+  // butuh jam akurat; tanpa ini muncul "Token error: connection lost".
+  configTime(7 * 3600, 0, "pool.ntp.org", "time.google.com",
+             "time.cloudflare.com");
+  Serial.print("[NTP] sinkron waktu");
+  {
+    time_t nowt = time(nullptr);
+    unsigned long tw = millis();
+    while (nowt < 1700000000 && millis() - tw < 20000) {
+      delay(300);
+      Serial.print(".");
+      nowt = time(nullptr);
+    }
+    Serial.printf("\n[NTP] epoch=%ld %s\n", (long)nowt,
+                  (nowt < 1700000000) ? "(GAGAL - NTP diblokir jaringan?)"
+                                      : "OK");
+  }
 
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
@@ -222,10 +238,9 @@ void setup() {
   Firebase.reconnectWiFi(true);
   Firebase.begin(&config, &auth);
 
-  // Online sekarang, dan otomatis offline saat perangkat terputus.
+  // Tandai online. (onDisconnect tidak dipakai di library ini; acuan status
+  // "hidup" pakai lastSeen dari heartbeat.)
   Firebase.RTDB.setBool(&fbdo, "/tree/status/" DEVICE_ID "/online", true);
-  Firebase.RTDB.onDisconnectSetBoolean(
-      &fbdo, "/tree/status/" DEVICE_ID "/online", false);
 
   // Cegah replay saat boot: catat id perintah terakhir tanpa memainkannya.
   if (Firebase.RTDB.getJSON(&fbdo, "/tree/command")) {

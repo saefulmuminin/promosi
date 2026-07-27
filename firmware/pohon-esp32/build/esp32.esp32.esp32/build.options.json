@@ -1,0 +1,9 @@
+{
+  "additionalFiles": "../..",
+  "compiler.optimization_flags": "-Os",
+  "customBuildProperties": "",
+  "fqbn": "esp32:esp32:esp32:PartitionScheme=huge_app,UploadSpeed=115200",
+  "hardwareFolders": "/Users/l-2024-diti-0101/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11,/Users/l-2024-diti-0101/Library/Arduino15/packages/esp32/hardware/esp32/3.3.11",
+  "otherLibrariesFolders": "/Users/l-2024-diti-0101/Documents/Arduino/libraries",
+  "sketchLocation": "/Users/l-2024-diti-0101/Desktop/baznas/promosi/promosi/firmware/pohon-esp32"
+}
