@@ -1,0 +1,27 @@
+{
+  "rules": {
+    "tree": {
+      // State daun yang diinginkan (desired state). Ditulis server (Admin SDK),
+      // dibaca oleh mesin ESP32/LD3D dan oleh tree-simulator.
+      "leaves": {
+        ".read": true,
+        ".write": false,
+        "$leafId": {
+          ".validate": "newData.hasChildren(['on', 'color'])"
+        }
+      },
+      // Perintah efek terakhir (mis. energy-flow) untuk dipicu sekali oleh device.
+      "command": {
+        ".read": true,
+        ".write": false
+      },
+      // Heartbeat & ACK dari perangkat. Device menulis di sini setelah login.
+      "status": {
+        ".read": true,
+        "$deviceId": {
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}
