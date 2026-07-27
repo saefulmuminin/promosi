@@ -29,8 +29,8 @@
 #include <WiFi.h>
 
 // ============================ KONFIGURASI ==================================
-#define WIFI_SSID "GANTI_SSID"
-#define WIFI_PASSWORD "GANTI_PASSWORD"
+#define WIFI_SSID "pih"
+#define WIFI_PASSWORD "sulthanrafi"
 
 // Firebase (project pohon-harapan). API key: Project settings > Web API Key.
 #define API_KEY "AIzaSyAPkALtZFRO4mE9k_t36G8qtA9Su-bP2dU"
